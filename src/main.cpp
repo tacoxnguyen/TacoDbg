@@ -12,8 +12,8 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "TacoDbg.h"
 #include "util.h"
+#include "TacoDbg.h"
 
 int main(int argc, char **argv)
 {
