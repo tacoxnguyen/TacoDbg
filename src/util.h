@@ -7,6 +7,8 @@
 #include <vector>
 #include <sys/types.h>
 
+void log(const char* format, ...);
+
 /* Print out a message, prefixed by the process ID.
 */
 void procmsg(const char* format, ...);

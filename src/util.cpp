@@ -19,6 +19,13 @@
 
 #include "util.h"
 
+void log(const char* format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	vfprintf(stdout, format, ap);
+	va_end(ap);
+}
 
 /* Print a message to stdout, prefixed by the process ID
 */
