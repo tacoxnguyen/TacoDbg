@@ -14,6 +14,8 @@
 #include "../inttypes.h"
 
 TacoDbg::TacoDbg()
+:_childPid(0),
+ _trapedBreakpoint(NULL)
 {
 	cs_open(CS_ARCH_X86, CS_MODE_32, &_csHandle);
 	cs_option(_csHandle, CS_OPT_DETAIL, CS_OPT_ON);
@@ -64,7 +66,11 @@ void TacoDbg::handleCommand(const char* cmd, std::vector<std::string> args)
 {
 	std::string command = std::string(cmd);
 
-	if(command == CMD_NEXT || command == CMD_S_NEXT)
+	if(command == CMD_CONTINUE || command == CMD_S_CONTINUE)
+	{
+		continueRun();
+	}
+	else if(command == CMD_NEXT || command == CMD_S_NEXT)
 	{
 		stepOver();
 	}
@@ -93,6 +99,36 @@ void TacoDbg::handleCommand(const char* cmd, std::vector<std::string> args)
 //		sscanf(saddress.c_str(), "%d", &addr);
 		disassemble(0x0);
 	}
+	else if(command == CMD_SETBP || command == CMD_S_SETBP)
+	{
+		std::string saddress = args.at(0);
+		int addr = 0x0;
+		sscanf(saddress.c_str(), "%d", &addr);
+		setBreakpoint(addr);
+	}
+	else if(command == "x")
+	{
+		std::string saddress = args.at(0);
+		int addr = 0x0;
+		sscanf(saddress.c_str(), "%d", &addr);
+		dumpMemory(addr, 0x10);
+	}
+}
+
+void TacoDbg::continueRun()
+{
+	stepInto();
+
+	int waitStatus;
+	ptrace(PTRACE_CONT, _childPid, 0, 0);
+	wait(&waitStatus);
+
+	unsigned long eip = getEIP();
+	DebugBreakpoint *bp = getBreakpointByAddress(eip - 1);
+	if(bp != NULL)
+	{
+		log("Breakpoint at 0x%x\n", bp->addr);
+	}
 }
 
 void TacoDbg::stepOver()
@@ -100,18 +136,38 @@ void TacoDbg::stepOver()
 
 }
 
-bool TacoDbg::stepInto()
+void TacoDbg::stepInto()
 {
-	int waitStatus;
-	ptrace(PTRACE_SINGLESTEP, _childPid, 0, 0);
-	wait(&waitStatus);
+	// remove breakpoint if exists
+	DebugBreakpoint *bp = getBreakpointByAddress(getEIP()-1);
 
-	if(WIFEXITED(waitStatus))
+	if(bp)
 	{
-		return false;
+		log("disable bp\n");
+		struct user_regs_struct regs;
+		ptrace(PTRACE_GETREGS, _childPid, 0, &regs);
+		regs.eip = bp->addr;
+		ptrace(PTRACE_SETREGS, _childPid, 0, &regs);
+
+		disableBreakpoint(bp);
 	}
 
-	return true;
+//	int waitStatus;
+//	ptrace(PTRACE_SINGLESTEP, _childPid, 0, 0);
+//	wait(&waitStatus);
+
+	if(bp)
+	{
+		log("enable bp\n");
+//		enableBreakpoint(bp);
+	}
+
+//	if(WIFEXITED(waitStatus))
+//	{
+//		return false;
+//	}
+//
+//	return true;
 }
 
 void TacoDbg::disassemble(int addr, int numBytes)
@@ -136,7 +192,7 @@ void TacoDbg::disassemble(int addr, int numBytes)
 	if(count > 0)
 	{
 		for (int j = 0; j < count; j++) {
-			log("0x%"PRIx64":\t%s\t%s\n", insn[j].address, insn[j].mnemonic, insn[j].op_str);
+			log("0x%"PRIx64":\t%s\t%s\n", (regs.eip + insn[j].address - address), insn[j].mnemonic, insn[j].op_str);
 		}
 	}
 	else
@@ -144,4 +200,75 @@ void TacoDbg::disassemble(int addr, int numBytes)
 		//TODO:
 		log("ERROR: Can't decode instruction\n");
 	}
+}
+
+void TacoDbg::setBreakpoint(int addr)
+{
+	DebugBreakpoint *bp = new DebugBreakpoint();
+	bp->addr = addr;
+
+	log("Set breakpoint at 0x%x\n", addr);
+
+	_breakpoints.push_back(bp);
+	enableBreakpoint(bp);
+}
+
+void TacoDbg::deleteBreakpoint(int bpNo)
+{
+
+}
+
+void TacoDbg::clearAllBreakpoints()
+{
+
+}
+
+void TacoDbg::dumpMemory(unsigned long addr, int size)
+{
+	for(int i = 0; i < size; i++)
+	{
+		unsigned word = ptrace(PTRACE_PEEKTEXT, _childPid, (void *) addr + 4*i, 0);
+		log("%x ", word);
+	}
+	log("\n");
+}
+
+void TacoDbg::enableBreakpoint(DebugBreakpoint* bp)
+{
+	bp->origData = ptrace(PTRACE_PEEKTEXT, _childPid, (void *) bp->addr, 0);
+	ptrace(PTRACE_POKETEXT, _childPid, (void *) bp->addr, (bp->origData & 0xFFFFFF00) | 0xCC);
+}
+
+void TacoDbg::disableBreakpoint(DebugBreakpoint* bp)
+{
+	unsigned data = ptrace(PTRACE_PEEKTEXT, _childPid, (void *) bp->addr, 0);
+	ptrace(PTRACE_POKETEXT, _childPid, (void *) bp->addr, (data & 0xFFFFFF00) | (bp->origData & 0xFF));
+}
+
+bool TacoDbg::isBreakpointTraped()
+{
+	unsigned long eip = getEIP();
+
+	return (getBreakpointByAddress(eip - 1) != NULL);
+}
+
+DebugBreakpoint* TacoDbg::getBreakpointByAddress(int addr)
+{
+	for(std::vector<DebugBreakpoint*>::iterator it = _breakpoints.begin(); it != _breakpoints.end(); it++)
+	{
+		DebugBreakpoint *bp = *it;
+		if(bp->addr == addr)
+		{
+			return bp;
+		}
+	}
+
+	return NULL;
+}
+
+unsigned long TacoDbg::getEIP()
+{
+	struct user_regs_struct regs;
+	ptrace(PTRACE_GETREGS, _childPid, 0, &regs);
+	return regs.eip;
 }

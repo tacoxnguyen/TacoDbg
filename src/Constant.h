@@ -3,6 +3,7 @@
 
 // commands
 #define			CMD_QUIT		"quit"
+#define			CMD_CONTINUE	"continue"
 #define			CMD_STEP		"step"
 #define			CMD_NEXT		"next"
 #define 		CMD_SETBP		"break"
@@ -14,11 +15,11 @@
 
 // command shortcuts
 #define			CMD_S_QUIT		"q"
+#define			CMD_S_CONTINUE	"c"
 #define			CMD_S_STEP		"s"
 #define			CMD_S_NEXT		"n"
 #define 		CMD_S_SETBP		"b"
 #define			CMD_S_DELETEBP	"d"
-#define			CMD_S_CLEARBP	"c"
 #define			CMD_S_PRINT		"p"
 #define			CMD_S_INFO		"i"
 
