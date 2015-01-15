@@ -4,7 +4,7 @@
 typedef struct
 {
     unsigned long	addr;
-    unsigned 		origData;
+    long	 		origData;
 } DebugBreakpoint;
 
 #endif

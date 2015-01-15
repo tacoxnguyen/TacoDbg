@@ -23,16 +23,16 @@ private:
 	void		continueRun();
 	void		stepOver();
 	void		stepInto();
-	void		disassemble(int addr, int numBytes = 10);
-	void		setBreakpoint(int addr);
-	void		deleteBreakpoint(int bpNo);
+	void		disassemble(unsigned long addr, int numBytes = 10);
+	void		setBreakpoint(unsigned long addr);
+	void		deleteBreakpoint(unsigned int bpNo);
 	void		enableBreakpoint(DebugBreakpoint* bp);
 	void 		disableBreakpoint(DebugBreakpoint* bp);
 	void		clearAllBreakpoints();
 	void		dumpMemory(unsigned long addr, int size);
 
 	bool		isBreakpointTraped();
-	DebugBreakpoint*	getBreakpointByAddress(int addr);
+	DebugBreakpoint*	getBreakpointByAddress(unsigned long addr);
 
 	unsigned long		getEIP();
 private:

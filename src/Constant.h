@@ -12,6 +12,7 @@
 #define			CMD_PRINT		"print"
 #define			CMD_INFO		"info"
 #define			CMD_DISASSEMBLE	"disassemble"
+#define 		CMD_DUMP		"x"
 
 // command shortcuts
 #define			CMD_S_QUIT		"q"
@@ -25,5 +26,6 @@
 
 // command-info
 #define			INFO_REGISTERS	"registers"
+#define			INFO_BREAKPOINT	"breakpoint"
 
 #endif

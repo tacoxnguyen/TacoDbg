@@ -56,4 +56,22 @@ int resume_from_breakpoint(pid_t pid, debug_breakpoint* bp);
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems);
 std::vector<std::string> split(const std::string &s, char delim);
 
+template<typename T>
+T stringToNumber(const char* str)
+{
+	std::string s(str);
+
+	T num;
+	std::stringstream ss;
+	ss << str;
+
+	if(s.size() > 2 && s.substr(0, 2) == "0x")
+	{
+		ss << std::hex;
+	}
+
+	ss >> num;
+	return num;
+}
+
 #endif
