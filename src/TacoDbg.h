@@ -35,6 +35,11 @@ private:
 	DebugBreakpoint*	getBreakpointByAddress(unsigned long addr);
 
 	unsigned long		getEIP();
+	
+	void		getCodeSegment(unsigned char* code, int size);
+	int			decodeInstruction(unsigned char* code, int size, cs_insn** insn);
+
+	void		printNextInstruction();
 private:
 	csh			_csHandle;
 	pid_t		_childPid;

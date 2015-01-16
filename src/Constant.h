@@ -1,6 +1,11 @@
 #ifndef __CONSTANTS_H__
 #define __CONSTANTS_H__
 
+#define			MAX_INSN_SIZE				8
+#define			MAX_DISASSEMBLE_CODE_SIZE	64
+#define			ADDR_FIRST_INSN				0x1000
+
+#define 		CMD_PREFIX		"$ "
 // commands
 #define			CMD_QUIT		"quit"
 #define			CMD_CONTINUE	"continue"

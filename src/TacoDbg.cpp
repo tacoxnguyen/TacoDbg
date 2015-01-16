@@ -44,7 +44,7 @@ void TacoDbg::startCommandLoop()
 
 	while(command != CMD_QUIT && command != CMD_S_QUIT)
 	{
-		log("$ ");
+		log(CMD_PREFIX);
 		std::getline(std::cin, buf);
 		std::vector<std::string> tokens = split(buf, ' ');
 
@@ -86,10 +86,12 @@ void TacoDbg::handleCommand(const char* cmd, std::vector<std::string> args)
 			struct user_regs_struct regs;
 			ptrace(PTRACE_GETREGS, _childPid, 0, &regs);
 			log(
-					"eax: 0x%x\necx: 0x%x\nedx: 0x%x\nebx: 0x%x\n"
-					"esp: 0x%x\nebp: 0x%x\neip: 0x%x\n",
+					"eax: 0x%lx\necx: 0x%lx\nedx: 0x%lx\nebx: 0x%lx\n"
+					"esp: 0x%lx\nebp: 0x%lx\nesi: 0x%lx\nedi: 0x%lx\neip: 0x%lx\n"
+					"eflags: 0x%lx\ncs: 0x%lx\nss: 0x%lx\nds: 0x%lx\nes: 0x%lx\nfs: 0x%lx\ngs: 0x%lx\n",
 					regs.eax, regs.ecx, regs.edx, regs.ebx,
-					regs.esp, regs.ebp, regs.eip);
+					regs.esp, regs.ebp, regs.esi, regs.edi, regs.eip,
+					regs.eflags, regs.xcs, regs.xss, regs.xds, regs.xes, regs.xfs, regs.xgs);
 		}
 		else if(infoType == INFO_BREAKPOINT)
 		{
@@ -103,16 +105,23 @@ void TacoDbg::handleCommand(const char* cmd, std::vector<std::string> args)
 	}
 	else if(command == CMD_DISASSEMBLE)
 	{
-//		std::string saddress = args.at(0);
-//		int addr = 0x0;
-//		sscanf(saddress.c_str(), "%d", &addr);
 		disassemble(0x0);
+
 	}
 	else if(command == CMD_SETBP || command == CMD_S_SETBP)
 	{
 		std::string saddress = args.at(0);
 		unsigned long addr = stringToNumber<unsigned long>(saddress.c_str());
 		setBreakpoint(addr);
+	}
+	else if(command == CMD_DELETEBP || command == CMD_S_DELETEBP)
+	{
+		unsigned int bpNo = stringToNumber<unsigned int>(args.at(0).c_str());
+		deleteBreakpoint(bpNo);
+	}
+	else if(command == CMD_CLEARBP)
+	{
+		clearAllBreakpoints();
 	}
 	else if(command == CMD_DUMP)
 	{
@@ -167,12 +176,7 @@ void TacoDbg::stepInto()
 		enableBreakpoint(bp);
 	}
 
-//	if(WIFEXITED(waitStatus))
-//	{
-//		return false;
-//	}
-//
-//	return true;
+	printNextInstruction();
 }
 
 void TacoDbg::disassemble(unsigned long addr, int numBytes)
@@ -180,19 +184,13 @@ void TacoDbg::disassemble(unsigned long addr, int numBytes)
 	struct user_regs_struct regs;
 	ptrace(PTRACE_GETREGS, _childPid, 0, &regs);
 
-#define CODE_SIZE 64
-	unsigned char code[CODE_SIZE];
+	unsigned char code[MAX_DISASSEMBLE_CODE_SIZE];
+	getCodeSegment(code, MAX_DISASSEMBLE_CODE_SIZE);
 
-	for(int i = 0; i < CODE_SIZE/4; i++)
-	{
-		long word =	ptrace(PTRACE_PEEKTEXT, _childPid, regs.eip + 4*i, 0);
-		memcpy(code + 4*i, &word, sizeof(word));
-	}
-
-	uint64_t address = 0x1000;
 	cs_insn *insn;
+	int count = decodeInstruction(code, sizeof(code), &insn);
 
-	int count = cs_disasm(_csHandle, (unsigned char*) code, sizeof(code), address, 0, &insn);
+	unsigned long address = 0x1000;
 
 	if(count > 0)
 	{
@@ -223,10 +221,12 @@ void TacoDbg::deleteBreakpoint(unsigned int bpNo)
 	if(bpNo > _breakpoints.size())
 	{
 		//TODO: exception
+		log("ERROR: breakpoint #%d is out of range\n", bpNo);
 	}
 	else
 	{
 		_breakpoints.erase(_breakpoints.begin() + bpNo - 1);
+		log("Deleted breakpoint #%d\n", bpNo);
 	}
 }
 
@@ -238,6 +238,7 @@ void TacoDbg::clearAllBreakpoints()
 		delete bp;
 	}
 	_breakpoints.clear();
+	log("Cleared all breakpoints\n");
 }
 
 void TacoDbg::dumpMemory(unsigned long addr, int size)
@@ -288,4 +289,35 @@ unsigned long TacoDbg::getEIP()
 	struct user_regs_struct regs;
 	ptrace(PTRACE_GETREGS, _childPid, 0, &regs);
 	return regs.eip;
+}
+
+void TacoDbg::getCodeSegment(unsigned char* code, int size)
+{
+	struct user_regs_struct regs;
+	ptrace(PTRACE_GETREGS, _childPid, 0, &regs);
+
+	for(int i = 0; i < size/4; i++)
+	{
+		unsigned word =	ptrace(PTRACE_PEEKTEXT, _childPid, regs.eip + 4*i, 0);
+		memcpy(code + 4*i, &word, sizeof(word));
+	}
+}
+
+int TacoDbg::decodeInstruction(unsigned char* code, int size, cs_insn** insn)
+{
+	return cs_disasm(_csHandle, code, size, ADDR_FIRST_INSN, 0, insn);
+}
+
+void TacoDbg::printNextInstruction()
+{
+	unsigned char code[MAX_INSN_SIZE];
+	getCodeSegment(code, MAX_INSN_SIZE);
+
+	cs_insn *insn;
+	int count = decodeInstruction(code, MAX_INSN_SIZE, &insn);
+
+	if(count > 0)
+	{
+		log("Next instruction: %s\t%s\n", insn[0].mnemonic, insn[0].op_str);
+	}
 }
